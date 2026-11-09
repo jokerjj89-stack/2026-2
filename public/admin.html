@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>부스 방문 현황 · 부스 QR 카운터</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/qrcode.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>부스 방문 현황<small>QR을 찍으면 실시간으로 집계됩니다 · <span class="live" id="live">실시간</span></small></h1>
+    <div class="actions">
+      <a class="btn primary" href="/admin/qr" target="_blank">QR 전체 인쇄</a>
+      <a class="btn" href="/api/export.csv">엑셀(CSV) 내려받기</a>
+      <a class="btn ghost" href="/admin/logout">로그아웃</a>
+    </div>
+  </header>
+
+  <section class="tiles">
+    <div class="tile"><div class="k">총 방문자 (중복 제외)</div><div class="v" id="tVisitors">–<small>명</small></div></div>
+    <div class="tile"><div class="k">총 스캔 수</div><div class="v" id="tScans">–<small>회</small></div></div>
+    <div class="tile"><div class="k">운영 부스</div><div class="v" id="tBooths">–<small>개</small></div></div>
+    <div class="tile"><div class="k">최다 방문 부스</div><div class="v" id="tTop" style="font-size:20px;padding-top:8px">–</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>부스 추가</h2>
+    <form class="add" id="addForm">
+      <label for="names" hidden>부스 이름</label>
+      <textarea id="names" rows="1" placeholder="예: 체험 부스 A  (여러 개는 줄바꿈으로 한 번에 추가)"></textarea>
+      <button class="primary" type="submit">추가</button>
+    </form>
+    <p class="hint">부스를 추가하면 그 부스 전용 QR이 바로 만들어집니다.</p>
+  </section>
+
+  <section class="panel">
+    <h2>부스별 방문자</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th>부스</th><th class="num">방문자</th><th class="num hide-sm">오늘</th><th class="num hide-sm">스캔</th><th class="barcell hide-sm">비율</th><th class="hide-sm">마지막 방문</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">불러오는 중…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="hint">방문자 = 같은 휴대폰이 여러 번 찍어도 1명으로 집계 · 스캔 = 찍은 전체 횟수</p>
+  </section>
+
+  <section class="panel">
+    <h2>시간대별 스캔 (최근 24시간대)</h2>
+    <div class="chart" id="chart"></div>
+  </section>
+</div>
+
+<dialog id="qrDlg">
+  <h2 id="qrName" style="margin:0 0 12px;font-size:20px"></h2>
+  <div class="qr" id="qrBox"></div>
+  <div class="url" id="qrUrl"></div>
+  <div class="actions" style="justify-content:center">
+    <a class="btn primary" id="qrPrint" target="_blank">이 QR 인쇄</a>
+    <button type="button" id="qrCopy">링크 복사</button>
+    <button type="button" onclick="qrDlg.close()">닫기</button>
+  </div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+let data = null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200); }
+function ago(ts){
+  if(!ts) return '–';
+  const s = Math.round((Date.now()-ts)/1000);
+  if(s<60) return '방금 전'; if(s<3600) return Math.floor(s/60)+'분 전';
+  if(s<86400) return Math.floor(s/3600)+'시간 전';
+  return new Date(ts).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+async function api(path, opts={}){
+  const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
+  if(r.status===401){ location.reload(); throw new Error('auth'); }
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error || '요청을 처리하지 못했습니다.');
+  return j;
+}
+async function load(){
+  try { data = await api('/api/stats'); render(); $('live').classList.remove('off'); $('live').textContent='실시간'; }
+  catch(e){ if(e.message!=='auth'){ $('live').classList.add('off'); $('live').textContent='연결 끊김 · 재시도 중'; } }
+}
+function render(){
+  $('tVisitors').innerHTML = data.totalVisitors.toLocaleString()+'<small>명</small>';
+  $('tScans').innerHTML = data.totalScans.toLocaleString()+'<small>회</small>';
+  $('tBooths').innerHTML = data.booths.length+'<small>개</small>';
+  const sorted = [...data.booths].sort((a,b)=>b.visitors-a.visitors || b.scans-a.scans);
+  $('tTop').textContent = sorted[0] && sorted[0].visitors ? `${sorted[0].name} (${sorted[0].visitors}명)` : '–';
+  const max = Math.max(1, ...sorted.map(b=>b.visitors));
+  $('rows').innerHTML = sorted.length ? sorted.map((b,i)=>`
+    <tr>
+      <td><span class="rank">${i+1}</span></td>
+      <td class="name">${esc(b.name)}<code>/s/${b.id}</code></td>
+      <td class="num"><b>${b.visitors.toLocaleString()}</b>명</td>
+      <td class="num hide-sm">${b.today.toLocaleString()}</td>
+      <td class="num hide-sm">${b.scans.toLocaleString()}</td>
+      <td class="barcell hide-sm"><div class="bar"><i style="width:${b.visitors/max*100}%"></i></div></td>
+      <td class="hide-sm">${ago(b.last)}</td>
+      <td style="white-space:nowrap">
+        <button class="ghost" data-act="qr" data-id="${b.id}">QR</button>
+        <button class="ghost" data-act="rename" data-id="${b.id}">이름</button>
+        <button class="ghost" data-act="reset" data-id="${b.id}">초기화</button>
+        <button class="ghost danger" data-act="del" data-id="${b.id}">삭제</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="8" class="empty">아직 부스가 없습니다. 위에서 첫 부스를 추가해 보세요.</td></tr>`;
+
+  const hours = data.hourly;
+  const hmax = Math.max(1, ...hours.map(h=>h.scans));
+  $('chart').innerHTML = hours.length ? hours.map(h=>`<div class="c"><b>${h.scans}</b><i style="height:${h.scans/hmax*70}px"></i><span>${Number(h.hour.slice(11))}시</span></div>`).join('')
+    : '<div class="empty" style="width:100%">아직 스캔 기록이 없습니다.</div>';
+}
+function scanUrl(id){ return `${data.baseUrl}/s/${id}`; }
+function showQr(b){
+  const qr = qrcode(0,'M'); qr.addData(scanUrl(b.id)); qr.make();
+  $('qrName').textContent = b.name;
+  $('qrBox').innerHTML = qr.createSvgTag({cellSize:8, margin:2, scalable:true});
+  $('qrUrl').textContent = scanUrl(b.id);
+  $('qrPrint').href = '/admin/qr?id='+b.id;
+  $('qrCopy').onclick = () => navigator.clipboard.writeText(scanUrl(b.id)).then(()=>toast('링크를 복사했습니다'),()=>toast('복사하지 못했습니다. 링크를 길게 눌러 복사하세요'));
+  $('qrDlg').showModal();
+}
+$('rows').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-act]'); if(!btn) return;
+  const b = data.booths.find(x=>x.id===btn.dataset.id); if(!b) return;
+  try {
+    if(btn.dataset.act==='qr') return showQr(b);
+    if(btn.dataset.act==='rename'){
+      const name = prompt('새 부스 이름', b.name); if(!name || name===b.name) return;
+      await api('/api/booths/'+b.id,{method:'PATCH',body:JSON.stringify({name})}); toast('이름을 바꿨습니다');
+    }
+    if(btn.dataset.act==='reset'){
+      if(!confirm(`"${b.name}" 방문 기록을 모두 지울까요? 되돌릴 수 없습니다.`)) return;
+      await api('/api/booths/'+b.id+'/reset',{method:'POST'}); toast('방문 기록을 초기화했습니다');
+    }
+    if(btn.dataset.act==='del'){
+      if(!confirm(`"${b.name}" 부스를 삭제할까요? QR도 더 이상 작동하지 않습니다.`)) return;
+      await api('/api/booths/'+b.id,{method:'DELETE'}); toast('부스를 삭제했습니다');
+    }
+    load();
+  } catch(err){ toast(err.message); }
+});
+$('addForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const names = $('names').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!names.length) return toast('부스 이름을 입력해 주세요');
+  try { const r = await api('/api/booths',{method:'POST',body:JSON.stringify({names})}); $('names').value=''; toast(`부스 ${r.added.length}개를 추가했습니다`); load(); }
+  catch(err){ toast(err.message); }
+});
+$('names').addEventListener('input', (e)=>{ e.target.rows = Math.min(8, Math.max(1, e.target.value.split('\n').length)); });
+load(); setInterval(load, 3000);
+</script>
+</body></html>

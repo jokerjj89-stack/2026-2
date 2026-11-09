@@ -1,0 +1,22 @@
+:root{--bg:#eef3f1;--card:#fff;--fg:#14211d;--muted:#5d6f69;--accent:#0f8a6a;--accent-soft:#d6efe7;--line:#dbe4e1;--bad:#c2410c;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1513;--card:#152320;--fg:#e6efec;--muted:#93a7a1;--accent:#34c49a;--accent-soft:#18392f;--line:#24362f;--bad:#fb923c;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px max(16px,env(safe-area-inset-right)) 24px max(16px,env(safe-area-inset-left))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:36px 24px 28px;width:100%;max-width:420px;text-align:center}
+.mark{width:76px;height:76px;margin:0 auto 18px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:40px;font-weight:700;animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+.mark.bad{background:var(--bad)}
+@keyframes pop{from{transform:scale(.4);opacity:.3}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.mark{animation:none}}
+.eyebrow{margin:0;color:var(--accent);font-weight:700;font-size:14px;letter-spacing:.02em}
+h1{margin:6px 0 6px;font-size:28px;line-height:1.25;text-wrap:balance;word-break:keep-all}
+.sub{margin:0;color:var(--muted);font-size:15px}
+.progress{margin-top:28px;padding-top:22px;border-top:1px dashed var(--line)}
+.ptext{font-size:15px;color:var(--muted)}
+.ptext b{color:var(--fg);font-size:22px}
+.bar{height:10px;border-radius:99px;background:var(--accent-soft);margin:10px 0 16px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.dots{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.dots li{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.dots li.on{background:var(--accent-soft);border-color:transparent;color:var(--fg)}
+.dots li.here{background:var(--accent);color:#fff}

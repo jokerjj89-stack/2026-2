@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>부스 QR 인쇄</title>
+<script src="/static/qrcode.js"></script>
+<style>
+  :root{--fg:#14211d;--muted:#5d6f69;--accent:#0f8a6a;--line:#cfd9d5;color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9eeec;color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif}
+  .bar{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between;z-index:2}
+  .bar label{font-size:14px;display:flex;gap:8px;align-items:center}
+  .bar select,.bar input{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+  button{font:inherit;border:0;background:var(--accent);color:#fff;padding:9px 16px;border-radius:10px;cursor:pointer}
+  .sheet{display:grid;grid-template-columns:repeat(var(--cols,2),1fr);gap:14px;padding:16px;max-width:900px;margin:0 auto}
+  .card{background:#fff;border:2px dashed var(--line);border-radius:14px;padding:22px 18px;text-align:center;break-inside:avoid;page-break-inside:avoid;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .card .eyebrow{font-size:13px;letter-spacing:.08em;color:var(--accent);font-weight:700}
+  .card h2{margin:0;font-size:26px;line-height:1.2;word-break:keep-all;text-wrap:balance}
+  .card svg{width:78%;height:auto;max-width:300px}
+  .card .cta{font-size:16px;font-weight:600}
+  .card .url{font:11px ui-monospace,Menlo,Consolas,monospace;color:var(--muted);word-break:break-all}
+  .empty{text-align:center;padding:60px 16px;color:var(--muted)}
+  @media print{
+    .bar{display:none}
+    body{background:#fff}
+    .sheet{padding:0;gap:8mm;max-width:none}
+    .card{border-color:#bbb}
+    @page{size:A4;margin:10mm}
+  }
+</style></head>
+<body>
+<div class="bar">
+  <strong>부스 QR 인쇄</strong>
+  <label>한 줄에 <select id="cols"><option value="1">1개 (크게)</option><option value="2" selected>2개</option><option value="3">3개</option></select></label>
+  <label>안내 문구 <input id="cta" value="QR을 찍고 방문 인증하세요!" size="22"></label>
+  <button onclick="print()">인쇄하기</button>
+</div>
+<div class="sheet" id="sheet"><div class="empty">불러오는 중…</div></div>
+<script>
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let data;
+function render(){
+  const only = new URLSearchParams(location.search).get('id');
+  const booths = data.booths.filter(b => !only || b.id === only);
+  const cta = document.getElementById('cta').value;
+  document.getElementById('sheet').style.setProperty('--cols', document.getElementById('cols').value);
+  document.getElementById('sheet').innerHTML = booths.length ? booths.map(b => {
+    const url = `${data.baseUrl}/s/${b.id}`;
+    const qr = qrcode(0,'M'); qr.addData(url); qr.make();
+    return `<div class="card"><div class="eyebrow">BOOTH CHECK-IN</div><h2>${esc(b.name)}</h2>${qr.createSvgTag({cellSize:8,margin:2,scalable:true})}<div class="cta">${esc(cta)}</div><div class="url">${esc(url)}</div></div>`;
+  }).join('') : '<div class="empty">인쇄할 부스가 없습니다. 관리자 화면에서 부스를 먼저 추가하세요.</div>';
+}
+fetch('/api/stats').then(r => { if(r.status===401) location.href='/admin'; return r.json(); }).then(j => { data = j; render(); });
+document.getElementById('cols').onchange = render;
+document.getElementById('cta').oninput = render;
+</script>
+</body></html>
