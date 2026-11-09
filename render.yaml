@@ -1,0 +1,25 @@
+# Render 무료 요금제 배포 설정 (웹 서비스 + Postgres 데이터베이스)
+# 무료 데이터베이스는 만든 날로부터 30일 뒤 만료됩니다. 행사 후 CSV를 꼭 내려받으세요.
+services:
+  - type: web
+    name: booth-qr
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: booth-db
+          property: connectionString
+
+databases:
+  - name: booth-db
+    plan: free
+    region: singapore
+    databaseName: booth
+    user: booth
